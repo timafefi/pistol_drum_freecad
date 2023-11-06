@@ -1,0 +1,80 @@
+# -*- coding: utf-8 -*-
+import FreeCAD
+import Part
+import math
+__title__   = "pistol_drum"
+__author__  = "T"
+
+def get_selection():
+    selection = Gui.Selection.getSelection()
+    for obj in selection:
+        if obj.Name[:8] != 'Cylinder':
+            raise ValueError
+    return selection
+
+
+def calculate_sizes(radius, amount):
+    angle = 360/int(amount)
+    angle_rad = math.radians(angle)
+    r = float(radius)/(1+math.sin(angle_rad/2))
+    vals = []
+    for i in range(0,int(amount)):
+        vals.append((round(r*math.cos(angle_rad*i), 2),
+                     round(r*math.sin(angle_rad*i), 2)))
+    little_rad = r*math.sin(angle_rad/2)
+    return vals, little_rad*0.9
+
+
+def set_cyl(cyl, main, pos, radius):
+    cyl.Radius = radius
+    cyl.Height = main.Height
+    cyl.FirstAngle = main.FirstAngle
+    cyl.SecondAngle = main.SecondAngle
+    cyl.Placement.Base = App.Vector(pos[0], pos[1], 0)
+    cyl.Placement.Rotation = App.Rotation(App.Vector(0, 0, 0), 0)
+    cyl.Placement = main.Placement.multiply(cyl.Placement)
+
+
+def get_good_names():
+    l = App.activeDocument().Objects
+    cut = 0
+    fus = 0
+    for o in l:
+        s = o.Label
+        if s.startswith("Cut"):
+            cut = max(cut, int(o.Label[-3:]))
+        elif s.startswith("Fusion"):
+            fus = max(fus, int(o.Label[-3:]))
+    cutname = f"Cut{str(cut+1).zfill(3)}"
+    fuzname = f"Fuz{str(fus+1).zfill(3)}"
+    return cutname, fuzname
+
+			
+
+def fusion(shapes, fn):
+	fus_obj = App.activeDocument().addObject("Part::MultiFuse",fn)
+	fus_obj.Shapes = shapes[1:]
+	for shape in shapes[1:]:
+		shape.Visibility=False
+	return fus_obj
+
+
+def perform_cut(selection):
+    cn, fn = get_good_names()
+    fus_obj = fusion(selection, fn)
+    main = selection[0]
+    cut = App.activeDocument().addObject("Part::Cut",cn)
+    cut.Base = App.activeDocument().getObjectsByLabel(main.Name)[0]
+    cut.Tool = App.activeDocument().getObjectsByLabel(fus_obj.Name)[0]
+
+
+
+
+selection = get_selection()
+main_cyl = selection[0]
+position, lilrad = calculate_sizes(main_cyl.Radius, len(selection)-1)
+for i in range(len(selection)-1):
+    set_cyl(selection[i+1], main_cyl, position[i], lilrad)
+
+
+perform_cut(selection)
